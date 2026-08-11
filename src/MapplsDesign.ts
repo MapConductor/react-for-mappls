@@ -32,7 +32,13 @@ export class MapplsDesign implements MapplsMapDesignType {
 
   /** アカウントの既定スタイル（`setStyle` を呼ばずに SDK に任せる）。 */
   static readonly Default = new MapplsDesign('default', '');
-  static readonly StandardDay = new MapplsDesign('standard-day', 'standard-day');
-  static readonly StandardNight = new MapplsDesign('standard-night', 'standard-night');
-  static readonly GreyDay = new MapplsDesign('grey-day', 'grey-day');
+
+  /**
+   * 標準（昼）。どのアカウントにも入っている基本スタイル。
+   *
+   * これ以外のスタイルは**アカウント紐付き**で、コンソールで割り当てた名前を
+   * `new MapplsDesign(id, styleName)` で指定する（存在しない名前は SDK が弾く。
+   * 実行時の一覧は `mapplsClassObject.getStyles()`）。
+   */
+  static readonly StandardDay = new MapplsDesign('standard_day', 'standard_day');
 }
