@@ -36,9 +36,21 @@ export class MapplsDesign implements MapplsMapDesignType {
   /**
    * 標準（昼）。どのアカウントにも入っている基本スタイル。
    *
-   * これ以外のスタイルは**アカウント紐付き**で、コンソールで割り当てた名前を
-   * `new MapplsDesign(id, styleName)` で指定する（存在しない名前は SDK が弾く。
+   * これ以外のスタイルは**契約に紐づく**。コンソールで割り当てた名前を
+   * `new MapplsDesign(id, styleName)` で指定する（契約に無い名前は SDK が弾く。
    * 実行時の一覧は `mapplsClassObject.getStyles()`）。
    */
   static readonly StandardDay = new MapplsDesign('standard_day', 'standard_day');
+
+  /**
+   * 標準（夜）。**追加料金の有料オプション**。
+   *
+   * 契約に含まれていないアカウントでは `setStyle` が弾くため、このリポジトリの
+   * サンプルでは選択肢に出していない（サンプルは追加料金を払っていない）。
+   * ライブラリとしては、契約済みのアプリがそのまま使えるよう公開しておく。
+   */
+  static readonly StandardNight = new MapplsDesign('standard_night', 'standard_night');
+
+  /** グレー（昼）。**追加料金の有料オプション**。{@link StandardNight} と同じ扱い。 */
+  static readonly GreyDay = new MapplsDesign('grey_day', 'grey_day');
 }

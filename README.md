@@ -57,15 +57,21 @@ function Map() {
 
 ## Map designs
 
-Mappls styles are **account-bound names**, not a fixed catalogue. `MapplsDesign`
-ships the two names that work on every account:
+Which tiles you can use is **decided by your Mappls contract**, not by a fixed
+catalogue. `MapplsDesign` ships four presets:
 
 - `MapplsDesign.Default` — leaves the account's default style untouched
-- `MapplsDesign.StandardDay` — the `standard_day` style
+- `MapplsDesign.StandardDay` — the `standard_day` style; included in every contract
+- `MapplsDesign.StandardNight` — the `standard_night` style; **paid add-on**
+- `MapplsDesign.GreyDay` — the `grey_day` style; **paid add-on**
+
+The two add-on styles are only usable once your contract includes them; without
+them the SDK rejects the name. This repository's sample apps do not pay for the
+add-ons, so they list only `Default` and `StandardDay`.
 
 Any other style your Mappls account has been assigned can be selected with
-`new MapplsDesign(id, styleName)`; the SDK rejects names that do not exist for
-the account, and the available names can be listed at runtime with
+`new MapplsDesign(id, styleName)`; the SDK rejects names the account does not
+have, and the available names can be listed at runtime with
 `mapplsClassObject.getStyles()`. Switch design by updating the view state's
 `mapDesignType` — it is applied through `mappls.setStyle()`.
 

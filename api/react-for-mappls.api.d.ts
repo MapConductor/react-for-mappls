@@ -480,6 +480,17 @@ declare class MapplsRasterLayerOverlayRenderer implements RasterLayerOverlayRend
     onPostProcess(): Promise<void>;
     private addLayer;
     private updateLayer;
+    /**
+     * スタイル再読込中に頼まれた削除の保留分。
+     *
+     * 追加は「ハンドルだけ返して resync が貼り直す」で済むが、削除は manager から
+     * 先に消えるため resync では拾えない。黙って捨てると、スタイル差分適用で
+     * 生き残った GL レイヤが画面に残り続ける（RasterLayer ページで選んだレリーフが
+     * GeoJSON Layer ページにも出る、という形で顕在化した）。ここで保留しておき、
+     * スタイルが編集可能になった最初の操作でまとめて消す。
+     */
+    private pendingRemovals;
+    private flushPendingRemovals;
     private removeLayer;
 }
 
@@ -577,8 +588,23 @@ declare class MapplsDesign implements MapplsMapDesignType {
     getValue(): string;
     /** アカウントの既定スタイル（`setStyle` を呼ばずに SDK に任せる）。 */
     static readonly Default: MapplsDesign;
+    /**
+     * 標準（昼）。どのアカウントにも入っている基本スタイル。
+     *
+     * これ以外のスタイルは**契約に紐づく**。コンソールで割り当てた名前を
+     * `new MapplsDesign(id, styleName)` で指定する（契約に無い名前は SDK が弾く。
+     * 実行時の一覧は `mapplsClassObject.getStyles()`）。
+     */
     static readonly StandardDay: MapplsDesign;
+    /**
+     * 標準（夜）。**追加料金の有料オプション**。
+     *
+     * 契約に含まれていないアカウントでは `setStyle` が弾くため、このリポジトリの
+     * サンプルでは選択肢に出していない（サンプルは追加料金を払っていない）。
+     * ライブラリとしては、契約済みのアプリがそのまま使えるよう公開しておく。
+     */
     static readonly StandardNight: MapplsDesign;
+    /** グレー（昼）。**追加料金の有料オプション**。{@link StandardNight} と同じ扱い。 */
     static readonly GreyDay: MapplsDesign;
 }
 
