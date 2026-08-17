@@ -25,7 +25,7 @@ Pass it to the view state:
 
 ```tsx
 const state = useMapplsViewState({
-  apiKey: import.meta.env.VITE_MAPPLS_API_KEY,
+  apiKey: MAPPLS_API_KEY,
   mapDesignType: MapplsDesign.Default,
   cameraPosition,
 });
@@ -41,9 +41,13 @@ import {
 } from '@mapconductor/react-for-mappls';
 import { createGeoPoint, createMapCameraPosition } from '@mapconductor/js-sdk-core';
 
+// Your own key. Read it from your environment however your build tool does
+// it, and keep it out of source control.
+const MAPPLS_API_KEY = '…';
+
 function Map() {
   const state = useMapplsViewState({
-    apiKey: import.meta.env.VITE_MAPPLS_API_KEY,
+    apiKey: MAPPLS_API_KEY,
     mapDesignType: MapplsDesign.Default,
     cameraPosition: createMapCameraPosition({
       position: createGeoPoint({ latitude: 28.6139, longitude: 77.209 }), // New Delhi
