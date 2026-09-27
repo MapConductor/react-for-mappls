@@ -89,16 +89,38 @@ export class MapplsRasterLayerOverlayRenderer
     }
     const opacity = state.visible ? state.opacity : 0;
     if (!this.holder.map.getLayer(handle.layerId)) {
-      this.holder.map.addLayer({
-        id: handle.layerId,
-        type: 'raster',
-        source: handle.sourceId,
-        paint: { 'raster-opacity': opacity },
-      } as LayerSpecification);
+      this.holder.map.addLayer(
+        {
+          id: handle.layerId,
+          type: 'raster',
+          source: handle.sourceId,
+          paint: { 'raster-opacity': opacity },
+        } as LayerSpecification,
+        this.firstBasemapLabelLayerId(),
+      );
     } else {
       this.holder.map.setPaintProperty(handle.layerId, 'raster-opacity', opacity);
     }
     return handle;
+  }
+
+  /**
+   * The style's first label layer, so a raster overlay can go under it.
+   *
+   * Appended at the top of the style instead, a raster overlay covers the
+   * place names, road names and shields the style draws -- a vector tile
+   * layer's own roads run straight through them, which is what "the labels
+   * are under the lines" looks like. Every raster overlay has the same
+   * problem, so the rule lives here rather than in each of them.
+   *
+   * Our own layers are skipped: markers are a symbol layer too, and anchoring
+   * to them would put the raster back above the labels.
+   */
+  private firstBasemapLabelLayerId(): string | undefined {
+    const layers = this.holder.map.getStyle?.()?.layers;
+    if (!layers) return undefined;
+    const anchor = layers.find((layer) => layer.type === 'symbol' && !isOurLayerId(layer.id));
+    return anchor?.id;
   }
 
   private updateLayer(handle: MapplsRasterLayerHandle, state: RasterLayerState): void {
@@ -134,4 +156,9 @@ export class MapplsRasterLayerOverlayRenderer
     removeLayerIfExists(this.holder.map, handle.layerId);
     removeSourceIfExists(this.holder.map, handle.sourceId);
   }
+}
+
+/** True for layers this SDK adds, as opposed to the style's own. */
+function isOurLayerId(id: string): boolean {
+  return id.startsWith('mc-');
 }
