@@ -165,6 +165,7 @@ export class MapplsProvider extends MapProvider {
       rasterLayerController,
       styleReadyRef,
       config.initCameraPosition?.tilt ?? null,
+      (name) => (mappls as { setStyle?: (name: string) => void }).setStyle?.(name),
     );
     return this.controller;
   }

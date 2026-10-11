@@ -23,6 +23,7 @@ import {
   type GeoPoint,
 } from '@mapconductor/js-sdk-core';
 import { lngLatFromEvent } from './helpers';
+import type { MapplsMapDesignType } from './MapplsDesign';
 import { toCameraPosition, toMapCameraPosition } from './MapCameraPosition';
 import { MapplsMapViewHolder } from './MapplsMapViewHolder';
 import { MapplsMarkerController } from './marker/MapplsMarkerController';
@@ -48,6 +49,8 @@ export class MapplsViewController
   private initialized = false;
   private logicalTiltHint: number | null = null;
   private readonly styleReadyRef: { current: boolean };
+  /** `mappls.setStyle` from the loaded SDK; null when driven headless. */
+  private readonly setStyle: ((name: string) => void) | null;
 
   readonly holder: MapplsMapViewHolder;
   private readonly markerController: MapplsMarkerController;
@@ -71,8 +74,10 @@ export class MapplsViewController
     rasterLayerController: MapplsRasterLayerController,
     styleReadyRef: { current: boolean } = { current: true },
     logicalTiltHint: number | null = null,
+    setStyle: ((name: string) => void) | null = null,
   ) {
     super();
+    this.setStyle = setStyle;
     this.mapInstance = holder.map;
     this.initialized = holder.map.loaded();
     this.holder = holder;
@@ -107,6 +112,20 @@ export class MapplsViewController
 
   getMap(): maplibregl.Map {
     return this.mapInstance;
+  }
+
+  /**
+   * Swaps the style in place. An empty name is the account default, which
+   * the SDK has no call to return to, so it is left alone -- the same rule
+   * as at creation. Called by the view state's `mapDesignType` setter.
+   */
+  setMapDesignType(design: MapplsMapDesignType): void {
+    if (!design.styleName) return;
+    try {
+      this.setStyle?.(design.styleName);
+    } catch {
+      // 未対応の SDK バージョンでは現在のスタイルのまま進める
+    }
   }
 
   /**

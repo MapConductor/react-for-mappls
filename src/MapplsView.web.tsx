@@ -223,7 +223,9 @@ function InternalMapplsMapView({
       bridgeUnsubs.current = [];
       provider.destroy();
     };
-  }, [state.mapDesignType.getValue(), state.apiKey]);
+    // Design changes are applied live via the controller (see the state's
+    // `mapDesignType` setter), so they must not recreate the map.
+  }, [state.apiKey]);
 
   // cameraTick is read here only to force a re-render when the camera moves,
   // so that toScreenOffset() recalculates bubble positions.
