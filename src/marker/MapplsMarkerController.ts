@@ -15,6 +15,8 @@ import {
   type MarkerFingerPrint,
   type MarkerState,
   type RasterLayerState,
+  pickMarkerHit,
+  preferMarkerHit,
 } from '@mapconductor/js-sdk-core';
 import { MapplsMapViewHolder } from '../MapplsMapViewHolder';
 import { ZoomAltitudeConverter } from '../zoom/ZoomAltitudeConverter';
@@ -289,57 +291,38 @@ export class MapplsMarkerController extends AbstractMarkerController<MapplsActua
     // click against each marker's on-screen icon rectangle (icon size + anchor),
     // and resolve overlaps by stacking order (the same z-index the marker layer
     // paints with — higher is on top). A `tapTolerance` ring around the icon is
-    // the fallback for near-misses on small icons. Falls back to the tiled-marker
-    // (raster) radius hit-test when nothing regular is hit.
+    // the fallback for near-misses on small icons. The rule is the core
+    // `pickMarkerHit` (android / iOS `MarkerHitTest.pickIndex`); tiled markers are
+    // compared with the same rule via `preferMarkerHit`.
     const clickScreen = this.holder.toScreenOffset(position);
-    const tolerance = Settings.Default.tapTolerance;
-    let bestOnIcon: MarkerEntity<MapplsActualMarker> | null = null;
-    let bestOnIconY = -Infinity;
-    let bestNear: MarkerEntity<MapplsActualMarker> | null = null;
-    let bestNearDistSq = Infinity;
-    for (const entity of this.markerManager.allEntities()) {
-      if (entity.marker === null) continue; // tiled markers are hit-tested below
-      const markerScreen = this.holder.toScreenOffset(entity.state.position);
-      const icon = (entity.state.icon ?? createDefaultIcon()).toBitmapIcon();
-      const dx = clickScreen.x - markerScreen.x;
-      const dy = clickScreen.y - markerScreen.y;
-      const left = -icon.anchor.x * icon.size.width;
-      const right = (1 - icon.anchor.x) * icon.size.width;
-      const top = -icon.anchor.y * icon.size.height;
-      const bottom = (1 - icon.anchor.y) * icon.size.height;
-      if (dx >= left && dx <= right && dy >= top && dy <= bottom) {
-        // Click is inside this marker's icon: keep the top-most drawn one. The
-        // marker layer paints markers in latitude order (mc-z-index), so the one
-        // lower on screen (larger y) is drawn on top — mirroring Leaflet/HERE.
-        if (markerScreen.y > bestOnIconY) {
-          bestOnIconY = markerScreen.y;
-          bestOnIcon = entity;
-        }
-      } else if (
-        dx >= left - tolerance &&
-        dx <= right + tolerance &&
-        dy >= top - tolerance &&
-        dy <= bottom + tolerance
-      ) {
-        const distSq = dx * dx + dy * dy;
-        if (distSq < bestNearDistSq) {
-          bestNearDistSq = distSq;
-          bestNear = entity;
-        }
-      }
-    }
-    const hit = bestOnIcon ?? bestNear;
-    if (hit) return hit;
+    const regular = pickMarkerHit(
+      clickScreen,
+      this.markerManager.allEntities().filter(entity => entity.marker !== null), // tiled markers below
+      entity => {
+        const icon = (entity.state.icon ?? createDefaultIcon()).toBitmapIcon();
+        return {
+          anchorScreen: this.holder.toScreenOffset(entity.state.position),
+          width: icon.size.width,
+          height: icon.size.height,
+          anchor: icon.anchor,
+        };
+      },
+      Settings.Default.tapTolerance,
+    );
+    if (regular?.exact) return regular.item;
 
-    const nearest = this.markerManager.findNearest(position);
-    if (nearest?.marker === null) {
-      const hitRadius =
-        pointerType === 'touch' ? MARKER_HIT_RADIUS_TOUCH_PX : MARKER_HIT_RADIUS_MOUSE_PX;
-      const found = this.tileRenderer?.findNearest(position, hitRadius, zoom);
-      return found ? (this.markerManager.getEntity(found.id) ?? null) : null;
-    }
-    return null;
+    // タイル化マーカーも同じ規則で比べる（指の下に描かれていれば、通常マーカーの近接より勝つ）。
+    const hitRadius =
+      pointerType === 'touch' ? MARKER_HIT_RADIUS_TOUCH_PX : MARKER_HIT_RADIUS_MOUSE_PX;
+    const tiledHit = this.tileRenderer?.findHit(position, hitRadius, zoom) ?? null;
+    const tiledEntity = tiledHit ? this.markerManager.getEntity(tiledHit.item.id) : null;
+    const best = preferMarkerHit<MarkerEntity<MapplsActualMarker>>(
+      regular,
+      tiledHit && tiledEntity ? { ...tiledHit, item: tiledEntity } : null,
+    );
+    return best?.item ?? null;
   }
+
 
   // ── other existing methods ────────────────────────────────────────────────
 
