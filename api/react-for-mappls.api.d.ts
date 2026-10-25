@@ -1,4 +1,4 @@
-import { MapConfig, GeoRectBounds, MarkerTilingOptions, MapProvider, MapViewControllerInterface, MapViewHolderBase, GeoPointInterface, Offset, GeoPoint, MarkerEntity, AbstractMarkerOverlayRenderer, MarkerManager, AddParams, ChangeParams, MarkerState, BitmapIcon, AbstractMarkerController, RasterLayerState, DefaultMarkerEventController, CircleEntity, AbstractCircleOverlayRenderer, CircleManagerInterface, CircleState, CircleController, PolylineEntity, AbstractPolylineOverlayRenderer, PolylineManagerInterface, PolylineState, PolylineController, MapCameraPosition, PolygonEntity, AbstractPolygonOverlayRenderer, PolygonManagerInterface, PolygonState, SlottedOverlayController, OnPolygonEventHandler, OverlayKind, OverlayHit, AbstractGroundImageOverlayRenderer, GroundImageState, GroundImageEntity, RasterLayerOverlayRenderer, RasterLayerAddParams, RasterLayerChangeParams, RasterLayerEntity, RasterLayerController, RasterHeaderSupport, BaseMapViewController, MarkerCapable, CircleCapable, PolylineCapable, PolygonCapable, GroundImageCapable, RasterLayerCapable, MapUISettings, OnMapInitializedHandler, OnMarkerEventHandler, MarkerAnimationOverlayHost, OnGroundImageEventHandler, MapDesignTypeInterface, AttributionRule, MapViewStateInterface, MapViewState, MapViewBaseProps, WebMercatorZoomAltitudeConverter } from '@mapconductor/js-sdk-core';
+import { MapConfig, GeoRectBounds, MarkerTilingOptions, MapProvider, MapViewControllerInterface, MapDesignTypeInterface, AttributionRule, MapViewHolderBase, GeoPointInterface, Offset, GeoPoint, MarkerEntity, AbstractMarkerOverlayRenderer, MarkerManager, AddParams, ChangeParams, MarkerState, BitmapIcon, AbstractMarkerController, RasterLayerState, DefaultMarkerEventController, CircleEntity, AbstractCircleOverlayRenderer, CircleManagerInterface, CircleState, CircleController, PolylineEntity, AbstractPolylineOverlayRenderer, PolylineManagerInterface, PolylineState, PolylineController, MapCameraPosition, PolygonEntity, AbstractPolygonOverlayRenderer, PolygonManagerInterface, PolygonState, SlottedOverlayController, OnPolygonEventHandler, OverlayKind, OverlayHit, AbstractGroundImageOverlayRenderer, GroundImageState, GroundImageEntity, RasterLayerOverlayRenderer, RasterLayerAddParams, RasterLayerChangeParams, RasterLayerEntity, RasterLayerController, RasterHeaderSupport, BaseMapViewController, MarkerCapable, CircleCapable, PolylineCapable, PolygonCapable, GroundImageCapable, RasterLayerCapable, MapUISettings, OnMapInitializedHandler, OnMarkerEventHandler, MarkerAnimationOverlayHost, OnGroundImageEventHandler, MapViewStateInterface, MapViewState, MapViewBaseProps, WebMercatorZoomAltitudeConverter } from '@mapconductor/js-sdk-core';
 import * as maplibregl from 'maplibre-gl';
 import React from 'react';
 
@@ -33,6 +33,44 @@ declare class MapplsProvider extends MapProvider {
     destroy(): void;
     /** Returns true if the rejection was caused by an intentional destroy() call. */
     static isDestroyedBeforeLoad(error: unknown): boolean;
+}
+
+interface MapplsMapDesignType extends MapDesignTypeInterface<string> {
+    /** `mappls.setStyle()` に渡すスタイル名。空文字は「アカウントの既定スタイル」。 */
+    readonly styleName: string;
+}
+/**
+ * Mappls のスタイルは URL ではなく**スタイル名**で切り替える
+ * （`mapplsClassObject.setStyle(name)`）。使えるスタイル名はアカウントに
+ * 紐づいていて、`getStyles()` で実行時に取れる。どのアカウントにも既定スタイルが
+ * 1 つ設定されている。android / ios の `MapplsDesign` と同じ形。
+ */
+declare class MapplsDesign implements MapplsMapDesignType {
+    readonly id: string;
+    readonly styleName: string;
+    readonly attributionRules: readonly AttributionRule[];
+    constructor(id: string, styleName: string, attributionRules?: readonly AttributionRule[]);
+    getValue(): string;
+    /** アカウントの既定スタイル（`setStyle` を呼ばずに SDK に任せる）。 */
+    static readonly Default: MapplsDesign;
+    /**
+     * 標準（昼）。どのアカウントにも入っている基本スタイル。
+     *
+     * これ以外のスタイルは**契約に紐づく**。コンソールで割り当てた名前を
+     * `new MapplsDesign(id, styleName)` で指定する（契約に無い名前は SDK が弾く。
+     * 実行時の一覧は `mapplsClassObject.getStyles()`）。
+     */
+    static readonly StandardDay: MapplsDesign;
+    /**
+     * 標準（夜）。**追加料金の有料オプション**。
+     *
+     * 契約に含まれていないアカウントでは `setStyle` が弾くため、このリポジトリの
+     * サンプルでは選択肢に出していない（サンプルは追加料金を払っていない）。
+     * ライブラリとしては、契約済みのアプリがそのまま使えるよう公開しておく。
+     */
+    static readonly StandardNight: MapplsDesign;
+    /** グレー（昼）。**追加料金の有料オプション**。{@link StandardNight} と同じ扱い。 */
+    static readonly GreyDay: MapplsDesign;
 }
 
 declare class MapplsMapViewHolder extends MapViewHolderBase<HTMLElement, maplibregl.Map> {
@@ -479,6 +517,19 @@ declare class MapplsRasterLayerOverlayRenderer implements RasterLayerOverlayRend
     onCameraChanged(_mapCameraPosition: MapCameraPosition): Promise<void>;
     onPostProcess(): Promise<void>;
     private addLayer;
+    /**
+     * The style's first label layer, so a raster overlay can go under it.
+     *
+     * Appended at the top of the style instead, a raster overlay covers the
+     * place names, road names and shields the style draws -- a vector tile
+     * layer's own roads run straight through them, which is what "the labels
+     * are under the lines" looks like. Every raster overlay has the same
+     * problem, so the rule lives here rather than in each of them.
+     *
+     * Our own layers are skipped: markers are a symbol layer too, and anchoring
+     * to them would put the raster back above the labels.
+     */
+    private firstBasemapLabelLayerId;
     private updateLayer;
     /**
      * スタイル再読込中に頼まれた削除の保留分。
@@ -516,6 +567,8 @@ declare class MapplsViewController extends BaseMapViewController implements MapV
     private initialized;
     private logicalTiltHint;
     private readonly styleReadyRef;
+    /** `mappls.setStyle` from the loaded SDK; null when driven headless. */
+    private readonly setStyle;
     readonly holder: MapplsMapViewHolder;
     private readonly markerController;
     private readonly markerEventController;
@@ -528,8 +581,14 @@ declare class MapplsViewController extends BaseMapViewController implements MapV
     private readonly rasterLayerController;
     constructor(holder: MapplsMapViewHolder, markerController: MapplsMarkerController, markerEventController: MapplsMarkerEventController, circleController: MapplsCircleController, polylineController: MapplsPolylineController, polygonController: MapplsPolygonConductor, groundImageController: MapplsGroundImageController, rasterLayerController: MapplsRasterLayerController, styleReadyRef?: {
         current: boolean;
-    }, logicalTiltHint?: number | null);
+    }, logicalTiltHint?: number | null, setStyle?: ((name: string) => void) | null);
     getMap(): maplibregl.Map;
+    /**
+     * Swaps the style in place. An empty name is the account default, which
+     * the SDK has no call to return to, so it is left alone -- the same rule
+     * as at creation. Called by the view state's `mapDesignType` setter.
+     */
+    setMapDesignType(design: MapplsMapDesignType): void;
     /**
      * Mappls の Map は Mapbox GL 互換なので、ジェスチャは GL 側のハンドラで
      * そのまま制御できる（Longdo のような Ui.Mouse の中間層は無い）。
@@ -568,44 +627,6 @@ declare class MapplsViewController extends BaseMapViewController implements MapV
      * コアの既定ではなくここで持つ。判定自体は core の MarkerManager。
      */
     protected dispatchMarkerTap(point: GeoPoint): boolean;
-}
-
-interface MapplsMapDesignType extends MapDesignTypeInterface<string> {
-    /** `mappls.setStyle()` に渡すスタイル名。空文字は「アカウントの既定スタイル」。 */
-    readonly styleName: string;
-}
-/**
- * Mappls のスタイルは URL ではなく**スタイル名**で切り替える
- * （`mapplsClassObject.setStyle(name)`）。使えるスタイル名はアカウントに
- * 紐づいていて、`getStyles()` で実行時に取れる。どのアカウントにも既定スタイルが
- * 1 つ設定されている。android / ios の `MapplsDesign` と同じ形。
- */
-declare class MapplsDesign implements MapplsMapDesignType {
-    readonly id: string;
-    readonly styleName: string;
-    readonly attributionRules: readonly AttributionRule[];
-    constructor(id: string, styleName: string, attributionRules?: readonly AttributionRule[]);
-    getValue(): string;
-    /** アカウントの既定スタイル（`setStyle` を呼ばずに SDK に任せる）。 */
-    static readonly Default: MapplsDesign;
-    /**
-     * 標準（昼）。どのアカウントにも入っている基本スタイル。
-     *
-     * これ以外のスタイルは**契約に紐づく**。コンソールで割り当てた名前を
-     * `new MapplsDesign(id, styleName)` で指定する（契約に無い名前は SDK が弾く。
-     * 実行時の一覧は `mapplsClassObject.getStyles()`）。
-     */
-    static readonly StandardDay: MapplsDesign;
-    /**
-     * 標準（夜）。**追加料金の有料オプション**。
-     *
-     * 契約に含まれていないアカウントでは `setStyle` が弾くため、このリポジトリの
-     * サンプルでは選択肢に出していない（サンプルは追加料金を払っていない）。
-     * ライブラリとしては、契約済みのアプリがそのまま使えるよう公開しておく。
-     */
-    static readonly StandardNight: MapplsDesign;
-    /** グレー（昼）。**追加料金の有料オプション**。{@link StandardNight} と同じ扱い。 */
-    static readonly GreyDay: MapplsDesign;
 }
 
 interface MapplsViewStateInterface extends MapViewStateInterface<MapplsMapDesignType> {
