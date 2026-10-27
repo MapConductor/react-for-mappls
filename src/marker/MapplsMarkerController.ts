@@ -9,12 +9,12 @@ import {
   MarkerTileRenderer,
   MarkerTilingOptions,
   RasterLayerSource,
-  Settings,
   type GeoPoint,
   type MarkerEntity,
   type MarkerFingerPrint,
   type MarkerState,
   type RasterLayerState,
+  markerHitShape,
   pickMarkerHit,
   preferMarkerHit,
 } from '@mapconductor/js-sdk-core';
@@ -291,32 +291,28 @@ export class MapplsMarkerController extends AbstractMarkerController<MapplsActua
     // Geometric marker hit-test computed from the clicked lat/lng — NOT the map
     // SDK's rendered-feature query. Mirrors the non-MapLibre providers (Leaflet /
     // HERE / OpenLayers): project the click and each marker to screen, test the
-    // click against each marker's on-screen icon rectangle (icon size + anchor),
-    // and resolve overlaps by stacking order (the same z-index the marker layer
-    // paints with — higher is on top). A `tapTolerance` ring around the icon is
-    // the fallback for near-misses on small icons. The rule is the core
+    // click against each marker's drawn shape (`markerHitShape`: the pin and its
+    // label, not the square bitmap around it), and resolve overlaps by stacking
+    // order (the same z-index the marker layer paints with — higher is on top).
+    // The pointer's slop around it — none for a mouse, MARKER_HIT_RADIUS_TOUCH_PX
+    // for a finger — is the fallback for near-misses. The rule is the core
     // `pickMarkerHit` (android / iOS `MarkerHitTest.pickIndex`); tiled markers are
     // compared with the same rule via `preferMarkerHit`.
     const clickScreen = this.holder.toScreenOffset(position);
+    const hitRadius =
+      pointerType === 'touch' ? MARKER_HIT_RADIUS_TOUCH_PX : MARKER_HIT_RADIUS_MOUSE_PX;
     const regular = pickMarkerHit(
       clickScreen,
       this.markerManager.allEntities().filter(entity => entity.marker !== null), // tiled markers below
       entity => {
         const icon = (entity.state.icon ?? createDefaultIcon()).toBitmapIcon();
-        return {
-          anchorScreen: this.holder.toScreenOffset(entity.state.position),
-          width: icon.size.width,
-          height: icon.size.height,
-          anchor: icon.anchor,
-        };
+        return { anchorScreen: this.holder.toScreenOffset(entity.state.position), ...markerHitShape(icon) };
       },
-      Settings.Default.tapTolerance,
+      hitRadius,
     );
     if (regular?.exact) return regular.item;
 
     // タイル化マーカーも同じ規則で比べる（指の下に描かれていれば、通常マーカーの近接より勝つ）。
-    const hitRadius =
-      pointerType === 'touch' ? MARKER_HIT_RADIUS_TOUCH_PX : MARKER_HIT_RADIUS_MOUSE_PX;
     const tiledHit = this.tileRenderer?.findHit(position, hitRadius, zoom) ?? null;
     const tiledEntity = tiledHit ? this.markerManager.getEntity(tiledHit.item.id) : null;
     const best = preferMarkerHit<MarkerEntity<MapplsActualMarker>>(
