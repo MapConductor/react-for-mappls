@@ -703,4 +703,5 @@ interface MapplsNamespace {
  */
 declare function loadMappls(apiKey: string): Promise<MapplsNamespace>;
 
-export { type MapplsConfig, MapplsDesign, type MapplsMapDesignType, MapplsMapView, MapplsMapView2D, type MapplsMapViewProps, MapplsProvider, MapplsViewController, MapplsViewState, type MapplsViewStateInterface, ZoomAltitudeConverter, loadMappls, useMapplsViewState };
+export { MapplsDesign, MapplsMapView, MapplsMapView2D, MapplsProvider, MapplsViewController, MapplsViewState, ZoomAltitudeConverter, loadMappls, useMapplsViewState };
+export type { MapplsConfig, MapplsMapDesignType, MapplsMapViewProps, MapplsViewStateInterface };
