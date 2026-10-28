@@ -42,9 +42,9 @@
     "mappls-web-maps": "^3.8.1"
   },
   "devDependencies": {
-    "maplibre-gl": "^6.15.0",
-    "react": "^19.3.0",
-    "tsup": "^8.5.1",
+    "maplibre-gl": "^6.16.0",
+    "react": "^19.3.1",
+    "tsup": "^9.0.0",
     "typescript": "^5.9.3"
   }
 }
