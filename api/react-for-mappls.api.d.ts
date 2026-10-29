@@ -548,8 +548,8 @@ declare class MapplsRasterLayerOverlayRenderer implements RasterLayerOverlayRend
 /**
  * android-sdk の MapplsRasterLayerController と同じく汎用 RasterLayerController の薄い
  * サブクラス。composition/update/has/clear は基底クラスが提供する。GL スタイルが
- * 再読み込みされると既存のソース・レイヤーは失われるため、resync() で登録済みの
- * ラスターレイヤーを貼り直す（android-sdk の reapplyStyle 相当）。
+ * 再読み込みされると既存のソース・レイヤーは失われるため、基底クラスの resync() で
+ * 登録済みのラスターレイヤーを貼り直す（android-sdk の reapplyStyle 相当）。
  */
 declare class MapplsRasterLayerController extends RasterLayerController<MapplsRasterLayerHandle> {
     /**
@@ -559,7 +559,6 @@ declare class MapplsRasterLayerController extends RasterLayerController<MapplsRa
      */
     protected get headerSupport(): RasterHeaderSupport;
     constructor(renderer: MapplsRasterLayerOverlayRenderer);
-    resync(): Promise<void>;
 }
 
 declare class MapplsViewController extends BaseMapViewController implements MapViewControllerInterface, MarkerCapable, CircleCapable, PolylineCapable, PolygonCapable, GroundImageCapable, RasterLayerCapable {
