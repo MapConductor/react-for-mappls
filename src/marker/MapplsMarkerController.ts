@@ -9,6 +9,7 @@ import {
   MarkerTileRenderer,
   MarkerTilingOptions,
   RasterLayerSource,
+  tilePixelRatio,
   type GeoPoint,
   type MarkerEntity,
   type MarkerFingerPrint,
@@ -25,7 +26,7 @@ import {
   type MapplsActualMarker,
 } from './MarkerLayer';
 
-const MAPCONDUCTOR_TILE_PROTOCOL = 'mc-local-tile';
+import { localTileUrlTemplate, MAPCONDUCTOR_TILE_PROTOCOL, parseLocalTileUrl } from './localTileUrl';
 
 const EMPTY_TILE = new Uint8Array([
   137, 80, 78, 71, 13, 10, 26, 10,
@@ -41,20 +42,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return buffer;
-}
-
-function parseLocalTileUrl(urlString: string): { routeId: string; x: number; y: number; z: number } | null {
-  const url = new URL(urlString);
-  const parts = url.pathname.split('/').filter(Boolean);
-  if (parts.length !== 4 && parts.length !== 5) return null;
-
-  const offset = parts.length === 5 ? 1 : 0;
-  const z = Number(parts[1 + offset]);
-  const x = Number(parts[2 + offset]);
-  const y = Number(parts[3 + offset].replace(/\.png$/, ''));
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
-
-  return { routeId: url.hostname, x, y, z };
 }
 
 function registerMapplsTileProtocol(): void {
@@ -87,27 +74,12 @@ function registerMapplsTileProtocol(): void {
       x: parsed.x,
       y: parsed.y,
       z: parsed.z,
+      pixelRatio: parsed.pixelRatio,
     });
     return { data: toArrayBuffer(bytes) };
   });
 
   mapLibreTileProtocolRegistered = true;
-}
-
-function localTileUrlTemplate({
-  routeId,
-  tileSize,
-  cacheKey,
-}: {
-  routeId: string;
-  tileSize: number;
-  cacheKey?: string;
-}): string {
-  const base = `${MAPCONDUCTOR_TILE_PROTOCOL}://${routeId}/${tileSize}`;
-  if (cacheKey) {
-    return `${base}/${cacheKey}/{z}/{x}/{y}.png`;
-  }
-  return `${base}/{z}/{x}/{y}.png`;
 }
 
 export class MapplsMarkerController extends AbstractMarkerController<MapplsActualMarker> {
@@ -122,6 +94,8 @@ export class MapplsMarkerController extends AbstractMarkerController<MapplsActua
   private tileRenderer: MarkerTileRenderer<MarkerState> | null = null;
   private tileRouteId: string | null = null;
   private tileVersion = 0;
+  /** Device pixels per CSS pixel the current tiles are drawn at. */
+  private tilePixelRatio = 1;
   // Bumped on every syncTiledOverlay()/removeTileOverlay() call. syncTiledOverlay
   // awaits SW round-trips, so a later call (or clear()/destroy()) can finish first;
   // an earlier call resuming afterward must not clobber the newer result.
@@ -185,7 +159,20 @@ export class MapplsMarkerController extends AbstractMarkerController<MapplsActua
       ? (item: MarkerState, tileZoom: number) =>
           iconScaleCallback(item, ZoomAltitudeConverter.maplibreZoomToGoogleZoom(tileZoom))
       : undefined;
-    const tileRenderer = new MarkerTileRenderer<MarkerState>(tiledStates, 256, scaledCallback);
+    // Tiles are laid out as 256 CSS pixels; drawing them at the display's ratio
+    // keeps pins and labels sharp instead of stretching a 1x image. The ratio
+    // changes only the pixels per tile, not the tile's z, so scaledCallback
+    // above still sees the same zoom.
+    this.tilePixelRatio = tilePixelRatio();
+    const tileRenderer = new MarkerTileRenderer<MarkerState>(
+      tiledStates,
+      256,
+      scaledCallback,
+      1.0,
+      false,
+      this.tilingOptions.declutterPx,
+      this.tilePixelRatio,
+    );
     this.tileRenderer = tileRenderer;
     this.tileVersion++;
     server.register(this.tileRouteId, tileRenderer);
@@ -221,6 +208,7 @@ export class MapplsMarkerController extends AbstractMarkerController<MapplsActua
       routeId: this.tileRouteId!,
       tileSize: 256,
       cacheKey: String(this.tileVersion),
+      pixelRatio: this.tilePixelRatio,
     });
   }
 
@@ -230,6 +218,7 @@ export class MapplsMarkerController extends AbstractMarkerController<MapplsActua
       routeId: this.tileRouteId!,
       tileSize: 256,
       cacheKey: String(this.tileVersion),
+      pixelRatio: this.tilePixelRatio,
     });
   }
 
