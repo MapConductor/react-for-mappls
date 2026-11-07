@@ -1,3 +1,4 @@
+import { POLYGON_TILE_LAYER_ID } from '@mapconductor/js-sdk-core';
 import type { LayerSpecification } from 'maplibre-gl';
 import {
   type MapCameraPosition,
@@ -98,12 +99,27 @@ export class MapplsRasterLayerOverlayRenderer
           source: handle.sourceId,
           paint: { 'raster-opacity': opacity },
         } as LayerSpecification,
-        this.firstBasemapLabelLayerId(),
+        this.beforeIdFor(state),
       );
     } else {
       this.holder.map.setPaintProperty(handle.layerId, 'raster-opacity', opacity);
     }
     return handle;
+  }
+
+  /**
+   * Where a raster layer goes. The polygon tiles are polygons drawn as images,
+   * not imagery: they go where the SDK's own polygon layers do, over the
+   * basemap and under polylines and markers. Under the first label layer they
+   * can end up beneath the style's opaque fills, which hid them in Mappls.
+   */
+  private beforeIdFor(state: RasterLayerState): string | undefined {
+    if (state.id === POLYGON_TILE_LAYER_ID) {
+      return ['polygon-fill-layer', 'polygon-outline-layer', 'polyline-layer', 'mc-marker-layer'].find((id) =>
+        this.holder.map.getLayer(id),
+      );
+    }
+    return this.firstBasemapLabelLayerId();
   }
 
   /**
