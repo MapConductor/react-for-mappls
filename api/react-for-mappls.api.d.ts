@@ -185,6 +185,17 @@ declare class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
     private ensureImages;
     private ensureImage;
     private loadBitmapIcon;
+    /**
+     * `map.loadImage` in the callback form the Mappls SDK has.
+     *
+     * The Mappls map is built on the mapbox-gl v1 line, where `loadImage(url, callback)`
+     * returns nothing and reports through the callback. Awaiting it as maplibre's promise
+     * form got `undefined` (so this fell back to a plain Image and fetched the icon twice),
+     * and the SDK then called the missing callback when its own fetch finished, which threw
+     * "e is not a function" as an unhandled rejection inside the SDK on every page with a
+     * marker. A promise, if a future SDK returns one, is honoured as well.
+     */
+    private loadImageThroughMap;
     private ensureFallbackDefaultIcon;
     private removeUnusedImages;
     private syncIconOffsets;

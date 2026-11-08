@@ -228,8 +228,7 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
     url: string,
   ): Promise<HTMLImageElement | ImageBitmap | ImageData> {
     try {
-      const image = await this.holder.map.loadImage(url);
-      return image.data;
+      return await this.loadImageThroughMap(url);
     } catch {
       const image = new Image();
       image.decoding = 'async';
@@ -240,6 +239,36 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
       });
       return image;
     }
+  }
+
+  /**
+   * `map.loadImage` in the callback form the Mappls SDK has.
+   *
+   * The Mappls map is built on the mapbox-gl v1 line, where `loadImage(url, callback)`
+   * returns nothing and reports through the callback. Awaiting it as maplibre's promise
+   * form got `undefined` (so this fell back to a plain Image and fetched the icon twice),
+   * and the SDK then called the missing callback when its own fetch finished, which threw
+   * "e is not a function" as an unhandled rejection inside the SDK on every page with a
+   * marker. A promise, if a future SDK returns one, is honoured as well.
+   */
+  private loadImageThroughMap(url: string): Promise<HTMLImageElement | ImageBitmap | ImageData> {
+    type Loaded = HTMLImageElement | ImageBitmap | ImageData;
+    const map = this.holder.map as unknown as {
+      loadImage(
+        url: string,
+        callback: (error?: Error | null, image?: Loaded | null) => void,
+      ): void | Promise<{ data: Loaded }>;
+    };
+    return new Promise<Loaded>((resolve, reject) => {
+      const returned = map.loadImage(url, (error, image) => {
+        if (error) reject(error);
+        else if (image) resolve(image);
+        else reject(new Error(`Failed to load marker icon: ${url}`));
+      });
+      if (returned && typeof (returned as Promise<{ data: Loaded }>).then === 'function') {
+        (returned as Promise<{ data: Loaded }>).then((response) => resolve(response.data), reject);
+      }
+    });
   }
 
   private ensureFallbackDefaultIcon(): boolean {
