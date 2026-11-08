@@ -5,7 +5,7 @@ import type {
   LineFeature,
   PolygonFeature,
 } from '../helpers';
-import { bringMarkerLayersToFront } from '../helpers';
+import { bringMarkerLayersToFront, setSourceFeatures } from '../helpers';
 import { MapplsMapViewHolder } from '../MapplsMapViewHolder';
 
 export interface MapplsActualPolygon {
@@ -69,8 +69,8 @@ export class MapplsPolygonLayer {
       const outlineSource = this.holder.map.getSource(this.outlineSourceId) as GeoJSONSource | undefined;
       if (!fillSource || !outlineSource) return false;
 
-      fillSource.setData(fillData);
-      outlineSource.setData(outlineData);
+      setSourceFeatures(fillSource, fillData.features);
+      setSourceFeatures(outlineSource, outlineData.features);
       return true;
     } catch {
       return false;

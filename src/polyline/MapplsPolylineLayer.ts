@@ -1,6 +1,6 @@
 import type { GeoJSONSource, LayerSpecification } from 'maplibre-gl';
 import type { PolylineEntity } from '@mapconductor/js-sdk-core';
-import { bringMarkerLayersToFront, type FeatureCollection, type LineFeature } from '../helpers';
+import { bringMarkerLayersToFront, setSourceFeatures, type FeatureCollection, type LineFeature } from '../helpers';
 import { MapplsMapViewHolder } from '../MapplsMapViewHolder';
 
 export type MapplsActualPolyline = LineFeature[];
@@ -45,7 +45,7 @@ export class MapplsPolylineLayer {
     try {
       const source = this.holder.map.getSource(this.sourceId) as GeoJSONSource | undefined;
       if (!source) return false;
-      source.setData(data);
+      setSourceFeatures(source, data.features);
       return true;
     } catch {
       return false;
