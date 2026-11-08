@@ -448,6 +448,7 @@ declare class MapplsGroundImageOverlayRenderer extends AbstractGroundImageOverla
     private readonly canEditStyle;
     /** Last values applied to the map style, keyed by state id. */
     private readonly applied;
+    private readonly pendingRemovals;
     constructor({ holder, canEditStyle, }: {
         holder: MapplsMapViewHolder;
         canEditStyle: () => boolean;
@@ -463,6 +464,7 @@ declare class MapplsGroundImageOverlayRenderer extends AbstractGroundImageOverla
     /** Sync an already-created image source+layer to the current state (diffed). */
     private applyToExisting;
     removeGroundImage(entity: GroundImageEntity<string>): Promise<void>;
+    private removeFromStyle;
 }
 
 declare class MapplsGroundImageController implements SlottedOverlayController {
