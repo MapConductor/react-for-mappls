@@ -5,7 +5,7 @@ import type {
   LineFeature,
   PolygonFeature,
 } from '../helpers';
-import { bringMarkerLayersToFront, setSourceFeatures } from '../helpers';
+import { bringMarkerLayersToFront, overlayLayerBeforeId, overlayStackKeyOf, setSourceFeatures } from '../helpers';
 import { MapplsMapViewHolder } from '../MapplsMapViewHolder';
 
 export interface MapplsActualPolygon {
@@ -101,11 +101,7 @@ export class MapplsPolygonLayer {
         });
       }
       if (!map.getLayer(this.layerId)) {
-        const beforeId = map.getLayer('polyline-layer')
-          ? 'polyline-layer'
-          : map.getLayer('mc-marker-layer')
-            ? 'mc-marker-layer'
-            : undefined;
+        const beforeId = overlayLayerBeforeId(map, overlayStackKeyOf(map, this.layerId) ?? { kind: 'polygon', sub: 0 });
         map.addLayer(
           {
             id: this.layerId,
@@ -122,11 +118,7 @@ export class MapplsPolygonLayer {
         );
       }
       if (!map.getLayer(this.outlineLayerId)) {
-        const beforeId = map.getLayer('polyline-layer')
-          ? 'polyline-layer'
-          : map.getLayer('mc-marker-layer')
-            ? 'mc-marker-layer'
-            : undefined;
+        const beforeId = overlayLayerBeforeId(map, overlayStackKeyOf(map, this.outlineLayerId) ?? { kind: 'polygon', sub: 1 });
         map.addLayer(
           {
             id: this.outlineLayerId,

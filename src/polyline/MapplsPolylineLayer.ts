@@ -1,6 +1,6 @@
 import type { GeoJSONSource, LayerSpecification } from 'maplibre-gl';
 import type { PolylineEntity } from '@mapconductor/js-sdk-core';
-import { bringMarkerLayersToFront, setSourceFeatures, type FeatureCollection, type LineFeature } from '../helpers';
+import { bringMarkerLayersToFront, setSourceFeatures, type FeatureCollection, type LineFeature, overlayLayerBeforeId, overlayStackKeyOf } from '../helpers';
 import { MapplsMapViewHolder } from '../MapplsMapViewHolder';
 
 export type MapplsActualPolyline = LineFeature[];
@@ -79,7 +79,7 @@ export class MapplsPolylineLayer {
               'line-width': ['get', MapplsPolylineLayer.Prop.STROKE_WIDTH],
             },
           } as LayerSpecification,
-          map.getLayer('mc-marker-layer') ? 'mc-marker-layer' : undefined,
+          overlayLayerBeforeId(map, overlayStackKeyOf(map, this.layerId) ?? { kind: 'polyline' }),
         );
       }
       bringMarkerLayersToFront(map);
