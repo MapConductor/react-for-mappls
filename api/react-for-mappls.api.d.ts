@@ -1,4 +1,4 @@
-import { MapConfig, GeoRectBounds, MarkerTilingOptions, MapProvider, MapViewControllerInterface, MapDesignTypeInterface, AttributionRule, MapViewHolderBase, GeoPointInterface, Offset, GeoPoint, MarkerEntity, AbstractMarkerOverlayRenderer, MarkerManager, AddParams, ChangeParams, MarkerState, BitmapIcon, AbstractMarkerController, RasterLayerState, DefaultMarkerEventController, CircleEntity, AbstractCircleOverlayRenderer, CircleManagerInterface, CircleState, CircleController, PolylineEntity, AbstractPolylineOverlayRenderer, PolylineManagerInterface, PolylineState, PolylineController, MapCameraPosition, PolygonEntity, AbstractPolygonOverlayRenderer, PolygonManagerInterface, PolygonState, SlottedOverlayController, OnPolygonEventHandler, OverlayKind, OverlayHit, AbstractGroundImageOverlayRenderer, GroundImageState, GroundImageEntity, RasterLayerOverlayRenderer, RasterLayerAddParams, RasterLayerChangeParams, RasterLayerEntity, RasterLayerController, RasterHeaderSupport, BaseMapViewController, MarkerCapable, CircleCapable, PolylineCapable, PolygonCapable, GroundImageCapable, RasterLayerCapable, MapUISettings, OnMapInitializedHandler, OnMarkerEventHandler, MarkerAnimationOverlayHost, OnGroundImageEventHandler, MapViewStateInterface, MapViewState, MapViewBaseProps, WebMercatorZoomAltitudeConverter } from '@mapconductor/js-sdk-core';
+import { MapConfig, GeoRectBounds, MarkerTilingOptions, MapProvider, MapViewControllerInterface, MapDesignTypeInterface, AttributionRule, MapViewHolderBase, GeoPointInterface, Offset, GeoPoint, MarkerEntity, AbstractMarkerOverlayRenderer, MarkerManager, AddParams, ChangeParams, MarkerState, BitmapIcon, AbstractMarkerController, RasterLayerState, DefaultMarkerEventController, CircleEntity, AbstractCircleOverlayRenderer, CircleManagerInterface, CircleState, CircleController, PolylineEntity, AbstractPolylineOverlayRenderer, PolylineManagerInterface, PolylineState, PolylineController, MapCameraPosition, PolygonEntity, AbstractPolygonOverlayRenderer, PolygonManagerInterface, PolygonState, PolygonController, AbstractGroundImageOverlayRenderer, GroundImageState, GroundImageEntity, SlottedOverlayController, OverlayKind, OverlayHit, RasterLayerOverlayRenderer, RasterLayerAddParams, RasterLayerChangeParams, RasterLayerEntity, RasterLayerController, RasterHeaderSupport, BaseMapViewController, MarkerCapable, CircleCapable, PolylineCapable, PolygonCapable, GroundImageCapable, RasterLayerCapable, MapUISettings, OnMapInitializedHandler, OnMarkerEventHandler, MarkerAnimationOverlayHost, OnGroundImageEventHandler, MapViewStateInterface, MapViewState, MapViewBaseProps, WebMercatorZoomAltitudeConverter } from '@mapconductor/js-sdk-core';
 import * as maplibregl from 'maplibre-gl';
 import React from 'react';
 
@@ -185,6 +185,17 @@ declare class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
     private ensureImages;
     private ensureImage;
     private loadBitmapIcon;
+    /**
+     * `map.loadImage` in the callback form the Mappls SDK has.
+     *
+     * The Mappls map is built on the mapbox-gl v1 line, where `loadImage(url, callback)`
+     * returns nothing and reports through the callback. Awaiting it as maplibre's promise
+     * form got `undefined` (so this fell back to a plain Image and fetched the icon twice),
+     * and the SDK then called the missing callback when its own fetch finished, which threw
+     * "e is not a function" as an unhandled rejection inside the SDK on every page with a
+     * marker. A promise, if a future SDK returns one, is honoured as well.
+     */
+    private loadImageThroughMap;
     private ensureFallbackDefaultIcon;
     private removeUnusedImages;
     private syncIconOffsets;
@@ -297,7 +308,6 @@ declare class MapplsCircleController extends CircleController<MapplsActualCircle
     constructor(renderer: MapplsCircleOverlayRenderer);
     update(state: CircleState): Promise<void>;
     resync(): Promise<void>;
-    clear(): Promise<void>;
     /**
      * Hit-test a map click (its lat/lng) against the circles geometrically (inside
      * the fill radius) and dispatch the click on the matching circle. Does NOT use
@@ -352,7 +362,6 @@ declare class MapplsPolylineController extends PolylineController<MapplsActualPo
     readonly renderer: MapplsPolylineOverlayRenderer;
     constructor(renderer: MapplsPolylineOverlayRenderer);
     resync(): Promise<void>;
-    clear(): Promise<void>;
     /**
      * Hit-test a map click (its lat/lng) against the polylines geometrically and,
      * if the click lands within the tap tolerance of a line, dispatch the click on
@@ -414,42 +423,34 @@ declare class MapplsPolygonOverlayRenderer extends AbstractPolygonOverlayRendere
     onPostProcess(): Promise<void>;
 }
 
-declare class MapplsPolygonConductor implements SlottedOverlayController {
-    readonly polygonOverlay: MapplsPolygonOverlayRenderer;
-    clickListener: OnPolygonEventHandler | null;
-    private operation;
-    constructor(polygonOverlay: MapplsPolygonOverlayRenderer);
-    composition(data: PolygonState[]): Promise<void>;
-    update(state: PolygonState): Promise<void>;
-    has(state: PolygonState): boolean;
+/**
+ * core の {@link PolygonController} をそのまま使う。差分管理（fingerprint による
+ * 追加・変更・削除の振り分け）、直列化、`has`、クリックカスケード（`resolveTap`）は
+ * すべて core 側の実装で、ここには持たない。
+ *
+ * 塗りと輪郭は {@link MapplsPolygonOverlayRenderer} が 1 つのレンダラーで描く
+ * （fill レイヤーは線幅を持てないので、輪郭は line レイヤーに別ソースで描く）。
+ * レンダラーは `onPostProcess()` でマネージャ全体から GeoJSON ソースを書き直す方式で、
+ * `removePolygon()` は何もしない。
+ */
+declare class MapplsPolygonController extends PolygonController<MapplsActualPolygon> {
+    readonly renderer: MapplsPolygonOverlayRenderer;
+    constructor(renderer: MapplsPolygonOverlayRenderer);
+    /** スタイルの再読み込みで消えたソース／レイヤーを、マネージャの内容から描き直す。 */
     resync(): Promise<void>;
+    /**
+     * core の `clear()` は `onRemove` → マネージャを空にする、までで描き直さない。
+     * このレンダラーは `onPostProcess()` でしか地図に反映しないので、ここで描き直す
+     * （同じ方式のポリラインコントローラと同じ）。
+     */
     clear(): Promise<void>;
-    private redraw;
-    /**
-     * Hit-test a map click (its lat/lng) against the polygons geometrically
-     * (point-in-polygon, honouring holes and zIndex) and dispatch the click on the
-     * top-most polygon that contains the point. Does NOT use a Mappls
-     * layer/overlay click event — detection is driven by the map click position,
-     * matching the marker/polyline paths and android. Returns true if hit.
-     */
-    handleMapClick(clicked: GeoPoint): boolean;
-    private enqueue;
-    readonly kind: OverlayKind;
-    hasId(id: string): boolean;
-    compositionAny(data: unknown[]): Promise<void>;
-    updateAny(state: unknown): Promise<void>;
-    setClickListenerAny(listener: unknown): void;
-    /**
-     * タップの当たり判定と配送。カスケードの 1 段（{@link OverlayHitResolver}）。
-     * 判定は既存の handleMapClick と同じ（point-in-polygon、穴と zIndex を考慮）。
-     */
-    resolveTap(position: GeoPointInterface): OverlayHit | null;
 }
 
 declare class MapplsGroundImageOverlayRenderer extends AbstractGroundImageOverlayRenderer<MapplsMapViewHolder, string> {
     private readonly canEditStyle;
     /** Last values applied to the map style, keyed by state id. */
     private readonly applied;
+    private readonly pendingRemovals;
     constructor({ holder, canEditStyle, }: {
         holder: MapplsMapViewHolder;
         canEditStyle: () => boolean;
@@ -465,6 +466,13 @@ declare class MapplsGroundImageOverlayRenderer extends AbstractGroundImageOverla
     /** Sync an already-created image source+layer to the current state (diffed). */
     private applyToExisting;
     removeGroundImage(entity: GroundImageEntity<string>): Promise<void>;
+    /**
+     * Under the polygons, circles, polylines and markers, above the rasters, whatever order the
+     * overlays were added in. Ground images have no zIndex; among themselves they keep the order
+     * they were handed over in.
+     */
+    private groundImageBeforeId;
+    private removeFromStyle;
 }
 
 declare class MapplsGroundImageController implements SlottedOverlayController {
@@ -519,6 +527,15 @@ declare class MapplsRasterLayerOverlayRenderer implements RasterLayerOverlayRend
     onCameraChanged(_mapCameraPosition: MapCameraPosition): Promise<void>;
     onPostProcess(): Promise<void>;
     private addLayer;
+    /** This raster's place in the overlay stack: the lowest band, ordered by zIndex. */
+    private stackKey;
+    /**
+     * Under every other overlay (the raster band is the lowest), and under the basemap's labels,
+     * whichever comes first. Marker tiles and polygon tiles are drawn as a raster but belong with
+     * the markers and the polygons, and are not imagery: they do not go under the labels either
+     * (under the first label the polygon tiles can end up beneath the style's opaque fills).
+     */
+    private beforeId;
     /**
      * The style's first label layer, so a raster overlay can go under it.
      *
@@ -580,7 +597,7 @@ declare class MapplsViewController extends BaseMapViewController implements MapV
     private readonly polygonController;
     private readonly groundImageController;
     private readonly rasterLayerController;
-    constructor(holder: MapplsMapViewHolder, markerController: MapplsMarkerController, markerEventController: MapplsMarkerEventController, circleController: MapplsCircleController, polylineController: MapplsPolylineController, polygonController: MapplsPolygonConductor, groundImageController: MapplsGroundImageController, rasterLayerController: MapplsRasterLayerController, styleReadyRef?: {
+    constructor(holder: MapplsMapViewHolder, markerController: MapplsMarkerController, markerEventController: MapplsMarkerEventController, circleController: MapplsCircleController, polylineController: MapplsPolylineController, polygonController: MapplsPolygonController, groundImageController: MapplsGroundImageController, rasterLayerController: MapplsRasterLayerController, styleReadyRef?: {
         current: boolean;
     }, logicalTiltHint?: number | null, setStyle?: ((name: string) => void) | null);
     getMap(): maplibregl.Map;

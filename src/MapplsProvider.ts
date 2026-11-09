@@ -24,7 +24,7 @@ import { MapplsCircleOverlayRenderer } from './circle/MapplsCircleOverlayRendere
 import { MapplsPolylineController } from './polyline/MapplsPolylineController';
 import { MapplsPolylineLayer, type MapplsActualPolyline } from './polyline/MapplsPolylineLayer';
 import { MapplsPolylineOverlayRenderer } from './polyline/MapplsPolylineOverlayRenderer';
-import { MapplsPolygonConductor } from './polygon/MapplsPolygonConductor';
+import { MapplsPolygonController } from './polygon/MapplsPolygonController';
 import { MapplsPolygonLayer, type MapplsActualPolygon } from './polygon/MapplsPolygonLayer';
 import { MapplsPolygonOverlayRenderer } from './polygon/MapplsPolygonOverlayRenderer';
 import { MapplsGroundImageController } from './groundimage/MapplsGroundImageController';
@@ -246,11 +246,11 @@ function getPolylineController(
 function getPolygonController(
   holder: MapplsMapViewHolder,
   canEditStyle: () => boolean,
-): MapplsPolygonConductor {
+): MapplsPolygonController {
   const polygonManager = new PolygonManager<MapplsActualPolygon>();
   const layer = new MapplsPolygonLayer({ holder, canEditStyle });
   const renderer = new MapplsPolygonOverlayRenderer({ layer, polygonManager, holder });
-  return new MapplsPolygonConductor(renderer);
+  return new MapplsPolygonController(renderer);
 }
 
 function getGroundImageController(

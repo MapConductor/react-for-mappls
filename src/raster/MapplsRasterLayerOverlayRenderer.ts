@@ -1,4 +1,3 @@
-import { POLYGON_TILE_LAYER_ID } from '@mapconductor/js-sdk-core';
 import type { LayerSpecification } from 'maplibre-gl';
 import {
   type MapCameraPosition,
@@ -8,7 +7,19 @@ import {
   type RasterLayerOverlayRenderer,
   type RasterLayerState,
 } from '@mapconductor/js-sdk-core';
-import { bringMarkerLayersToFront, createRasterSource, removeLayerIfExists, removeSourceIfExists } from '../helpers';
+import {
+  bringMarkerLayersToFront,
+  createRasterSource,
+  forgetOverlayStackKey,
+  MARKER_TILES_LAYER_ID,
+  POLYGON_TILES_LAYER_ID,
+  moveLayerToStackPlace,
+  overlayLayerBeforeId,
+  overlayStackKeyOf,
+  rememberOverlayStackKey,
+  removeLayerIfExists,
+  removeSourceIfExists,
+} from '../helpers';
 import { MapplsMapViewHolder } from '../MapplsMapViewHolder';
 
 /** GL のソース／レイヤー ID の対。android-sdk の MapplsRasterLayerHandle と同一。 */
@@ -54,10 +65,14 @@ export class MapplsRasterLayerOverlayRenderer
       const { prev } = params;
       const next = params.current.state;
       if (prev.state.source !== next.source) {
-        this.removeLayer(prev.layer);
+        // Replaced, not removed: the new layer keeps the old one's place among equal zIndexes.
+        this.removeLayer(prev.layer, { keepStackPlace: true });
         return this.addLayer(next);
       }
       this.updateLayer(prev.layer, next);
+      if (prev.state.zIndex !== next.zIndex && prev.layer.layerId !== MARKER_TILES_LAYER_ID && prev.layer.layerId !== POLYGON_TILES_LAYER_ID && this.canEditStyle()) {
+        moveLayerToStackPlace(this.holder.map, prev.layer.layerId, this.stackKey(prev.layer.layerId, next));
+      }
       return prev.layer;
     });
     bringMarkerLayersToFront(this.holder.map);
@@ -99,7 +114,7 @@ export class MapplsRasterLayerOverlayRenderer
           source: handle.sourceId,
           paint: { 'raster-opacity': opacity },
         } as LayerSpecification,
-        this.beforeIdFor(state),
+        this.beforeId(handle.layerId, state),
       );
     } else {
       this.holder.map.setPaintProperty(handle.layerId, 'raster-opacity', opacity);
@@ -107,19 +122,27 @@ export class MapplsRasterLayerOverlayRenderer
     return handle;
   }
 
+  /** This raster's place in the overlay stack: the lowest band, ordered by zIndex. */
+  private stackKey(layerId: string, state: RasterLayerState) {
+    return rememberOverlayStackKey(this.holder.map, layerId, 'rasterLayer', state.zIndex);
+  }
+
   /**
-   * Where a raster layer goes. The polygon tiles are polygons drawn as images,
-   * not imagery: they go where the SDK's own polygon layers do, over the
-   * basemap and under polylines and markers. Under the first label layer they
-   * can end up beneath the style's opaque fills, which hid them in Mappls.
+   * Under every other overlay (the raster band is the lowest), and under the basemap's labels,
+   * whichever comes first. Marker tiles and polygon tiles are drawn as a raster but belong with
+   * the markers and the polygons, and are not imagery: they do not go under the labels either
+   * (under the first label the polygon tiles can end up beneath the style's opaque fills).
    */
-  private beforeIdFor(state: RasterLayerState): string | undefined {
-    if (state.id === POLYGON_TILE_LAYER_ID) {
-      return ['polygon-fill-layer', 'polygon-outline-layer', 'polyline-layer', 'mc-marker-layer'].find((id) =>
-        this.holder.map.getLayer(id),
-      );
+  private beforeId(layerId: string, state: RasterLayerState): string | undefined {
+    if (layerId === MARKER_TILES_LAYER_ID || layerId === POLYGON_TILES_LAYER_ID) {
+      return overlayLayerBeforeId(this.holder.map, overlayStackKeyOf(this.holder.map, layerId)!);
     }
-    return this.firstBasemapLabelLayerId();
+    const stack = overlayLayerBeforeId(this.holder.map, this.stackKey(layerId, state));
+    const label = this.firstBasemapLabelLayerId();
+    if (label == null) return stack;
+    if (stack == null) return label;
+    const layers = this.holder.map.getStyle?.()?.layers?.map((layer) => layer.id) ?? [];
+    return layers.indexOf(label) < layers.indexOf(stack) ? label : stack;
   }
 
   /**
@@ -166,7 +189,8 @@ export class MapplsRasterLayerOverlayRenderer
     }
   }
 
-  private removeLayer(handle: MapplsRasterLayerHandle): void {
+  private removeLayer(handle: MapplsRasterLayerHandle, { keepStackPlace = false } = {}): void {
+    if (!keepStackPlace) forgetOverlayStackKey(this.holder.map, handle.layerId);
     if (!this.canEditStyle()) {
       this.pendingRemovals.push(handle);
       return;
