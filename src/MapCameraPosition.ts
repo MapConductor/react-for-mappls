@@ -28,7 +28,7 @@ export function toCameraPosition(pos: MapCameraPosition): {
 } {
     if (pos.tilt >= 0) {
         return {
-            center: [pos.center.longitude, pos.center.latitude],
+            center: [pos.position.longitude, pos.position.latitude],
             // Google Maps 2D (the project-wide reference) snaps zoom to the
             // nearest integer (9.5 -> 10, 4.5 -> 5); Mappls renders the true
             // fractional zoom, leaving the two up to half a level apart at
