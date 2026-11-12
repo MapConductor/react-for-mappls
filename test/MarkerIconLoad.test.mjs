@@ -26,6 +26,7 @@ function fixture() {
     const map = {
         hasImage: (id) => images.has(id),
         addImage: (id, image) => { images.set(id, image); },
+        on() {},
         loadImage(url, callback) {
             calls.push({ url, callbackType: typeof callback });
             setTimeout(() => {
