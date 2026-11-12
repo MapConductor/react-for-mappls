@@ -1,4 +1,4 @@
-import { PolygonTiler, POLYGON_TILE_LAYER_ID, polygonTileRasterLayerState, POLYLINE_TILE_LAYER_ID, polylineTileRasterLayerState, CIRCLE_TILE_LAYER_ID, circleTileRasterLayerState } from '@mapconductor/js-sdk-core';
+import { cameraFromPaddedCenter, cameraWithPaddedCenter, MapPaddings, PolygonTiler, POLYGON_TILE_LAYER_ID, polygonTileRasterLayerState, POLYLINE_TILE_LAYER_ID, polylineTileRasterLayerState, CIRCLE_TILE_LAYER_ID, circleTileRasterLayerState } from '@mapconductor/js-sdk-core';
 import type * as maplibregl from 'maplibre-gl';
 import {
   buildVisibleRegion,
@@ -49,6 +49,14 @@ export class MapplsViewController
   private readonly mapInstance: maplibregl.Map;
   private initialized = false;
   private logicalTiltHint: number | null = null;
+  /**
+   * The paddings the app asked for. The engine's own `padding` is left at zero:
+   * it widens the frustum toward the top, so under tilt a large top padding
+   * reaches past the horizon and the engine loads tiles out to it (the map
+   * stalls). Shifting the camera centre instead puts the target at the padded
+   * centre with the frustum the engine would draw without padding.
+   */
+  private cameraPaddings: MapPaddings = MapPaddings.Zeros;
   private readonly styleReadyRef: { current: boolean };
   /** `mappls.setStyle` from the loaded SDK; null when driven headless. */
   private readonly setStyle: ((name: string) => void) | null;
@@ -269,7 +277,7 @@ export class MapplsViewController
 
   moveCamera(position: MapCameraPosition): Promise<boolean> {
     this.logicalTiltHint = position.tilt;
-    const cam = toCameraPosition(position);
+    const cam = toCameraPosition(this.withPaddedCenter(position));
     return new Promise((resolve) => {
       this.mapInstance.once('moveend', () => resolve(true));
       // jumpTo (not flyTo) so duration = 0 moves the camera instantly with no animation.
@@ -285,7 +293,7 @@ export class MapplsViewController
 
   animateCamera(position: MapCameraPosition, durationMillis: number): Promise<boolean> {
     this.logicalTiltHint = position.tilt;
-    const cam = toCameraPosition(position);
+    const cam = toCameraPosition(this.withPaddedCenter(position));
     return new Promise((resolve) => {
       this.mapInstance.once('moveend', () => resolve(true));
       this.mapInstance.easeTo({
@@ -300,6 +308,9 @@ export class MapplsViewController
   }
 
   fitBounds(bounds: GeoRectBounds, padding: number): Promise<boolean> {
+    // The fit centres the bounds in the full view (the engine does not keep a
+    // fit's padding), so the camera paddings no longer describe the view.
+    this.cameraPaddings = MapPaddings.Zeros;
     return new Promise((resolve) => {
       this.mapInstance.once('moveend', () => resolve(true));
       const fitPadding = padding;
@@ -330,11 +341,27 @@ export class MapplsViewController
       logicalTiltHint: this.logicalTiltHint,
     });
     if (!camera) return camera;
+    const padded = cameraFromPaddedCenter(camera, this.cameraPaddings, camera.fov, this.canvasSize());
     const visibleRegion = this.getVisibleRegion();
-    if (!visibleRegion) return camera;
+    if (!visibleRegion) return padded;
     // Matches Android: the visible region rides on cameraPosition so that
     // mapViewState.cameraPosition.visibleRegion works without the controller.
-    return camera.copy({ visibleRegion });
+    return padded.copy({ visibleRegion });
+  }
+
+  /** Moves the camera centre so the target lands at the padded-area centre; the engine's padding stays zero. */
+  private withPaddedCenter(position: MapCameraPosition): MapCameraPosition {
+    const paddings = position.paddings ?? this.cameraPaddings;
+    this.cameraPaddings = paddings;
+    // toCameraPosition snaps a non-negative tilt's zoom to an integer, so measure the shift at that zoom.
+    const zoom = position.tilt >= 0 ? Math.round(position.zoom) : position.zoom;
+    return cameraWithPaddedCenter(position.copy({ paddings }), readVerticalFov(this.mapInstance), this.canvasSize(), zoom)
+      .copy({ paddings: MapPaddings.Zeros });
+  }
+
+  private canvasSize(): { width: number; height: number } {
+    const canvas = this.mapInstance.getCanvas();
+    return { width: canvas.clientWidth, height: canvas.clientHeight };
   }
 
   /**
