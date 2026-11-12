@@ -25,7 +25,7 @@ import {
 } from '@mapconductor/js-sdk-core';
 import { lngLatFromEvent } from './helpers';
 import type { MapplsMapDesignType } from './MapplsDesign';
-import { toCameraPosition, toMapCameraPosition } from './MapCameraPosition';
+import { toCameraPosition, toMapCameraPosition, readVerticalFov } from './MapCameraPosition';
 import { MapplsMapViewHolder } from './MapplsMapViewHolder';
 import { MapplsMarkerController } from './marker/MapplsMarkerController';
 import { MapplsMarkerEventController } from './marker/MapplsMarkerEventController';
@@ -278,6 +278,7 @@ export class MapplsViewController
         zoom: cam.zoom,
         bearing: cam.bearing,
         pitch: cam.tilt,
+        ...(cam.padding ? { padding: cam.padding } : {}),
       });
     });
   }
@@ -292,6 +293,7 @@ export class MapplsViewController
         zoom: cam.zoom,
         bearing: cam.bearing,
         pitch: cam.tilt,
+        ...(cam.padding ? { padding: cam.padding } : {}),
         duration: durationMillis || 500,
       });
     });
@@ -323,6 +325,8 @@ export class MapplsViewController
       zoom: this.mapInstance.getZoom(),
       bearing: this.mapInstance.getBearing(),
       tilt: this.mapInstance.getPitch(),
+      padding: this.mapInstance.getPadding(),
+      fov: readVerticalFov(this.mapInstance),
       logicalTiltHint: this.logicalTiltHint,
     });
     if (!camera) return camera;
