@@ -137,6 +137,8 @@ export class MapplsProvider extends MapProvider {
     }
 
     const map = await waitForGlMap(mapplsMap);
+    // MapOptions にはパディングの口が無いので、作った直後に入れる。
+    if (initialCamera?.padding) map.setPadding(initialCamera.padding);
     if (token !== this.initToken) {
       try {
         map.remove();
