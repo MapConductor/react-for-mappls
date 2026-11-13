@@ -13,13 +13,13 @@ import {
 import {
   useMapViewStyle,
   useCameraRestriction,
-  useMapUISettings,
+  useMapUISettings, usePolylineTilingOptions, useCircleTilingOptions,
   useMarkerRenderingSupport,
 } from '@mapconductor/js-sdk-react/internal';
 import {
   MapViewBaseProps,
   OverlayCollector,
-  MarkerTilingOptions,
+  MarkerTilingOptions, PolylineTilingOptions, CircleTilingOptions,
   type GeoRectBounds,
   type MapCameraPosition,
   type GeoPoint,
@@ -42,6 +42,18 @@ export interface MapplsMapViewProps extends MapViewBaseProps<MapplsViewStateInte
   onError?: (error: Error) => void;
   children?: React.ReactNode;
   markerTilingOptions?: MarkerTilingOptions;
+  /**
+   * When to draw polylines as raster tiles ({@link PolylineTilingOptions.Default} if omitted).
+   * Read when the map is created; a later value applies from the next time the polylines are
+   * handed to the map.
+   */
+  polylineTilingOptions?: PolylineTilingOptions;
+  /**
+   * When to draw circles as raster tiles ({@link CircleTilingOptions.Default} if omitted).
+   * Read when the map is created; a later value applies from the next time the circles are
+   * handed to the map.
+   */
+  circleTilingOptions?: CircleTilingOptions;
 }
 
 /**
@@ -69,6 +81,8 @@ function InternalMapplsMapView({
   onError,
   children,
   markerTilingOptions,
+  polylineTilingOptions,
+  circleTilingOptions,
 }: MapplsMapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [provider] = useState(() => new MapplsProvider());
@@ -116,6 +130,8 @@ function InternalMapplsMapView({
       restrictBounds,
       initCameraPosition: state.cameraPosition,
       markerTilingOptions,
+      polylineTilingOptions,
+      circleTilingOptions,
     };
 
     provider
@@ -233,6 +249,8 @@ function InternalMapplsMapView({
   void cameraTick;
 
   useMapUISettings(state, controller);
+  usePolylineTilingOptions(controller, polylineTilingOptions);
+  useCircleTilingOptions(controller, circleTilingOptions);
   // マップ生成時 config だけでなく、prop の変化にも追随させる（android-sdk 相当）。
   useCameraRestriction(controller, { cameraRestriction, restrictBounds, minZoom, maxZoom });
 

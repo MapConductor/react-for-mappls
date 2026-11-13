@@ -2,7 +2,7 @@ import {
   CircleManager,
   MapProvider,
   MarkerManager,
-  MarkerTilingOptions,
+  MarkerTilingOptions, PolylineTiler, PolylineTilingOptions, CircleTiler, CircleTilingOptions,
   PolygonManager,
   PolylineManager,
   type GeoRectBounds,
@@ -24,7 +24,7 @@ import { MapplsCircleOverlayRenderer } from './circle/MapplsCircleOverlayRendere
 import { MapplsPolylineController } from './polyline/MapplsPolylineController';
 import { MapplsPolylineLayer, type MapplsActualPolyline } from './polyline/MapplsPolylineLayer';
 import { MapplsPolylineOverlayRenderer } from './polyline/MapplsPolylineOverlayRenderer';
-import { MapplsPolygonConductor } from './polygon/MapplsPolygonConductor';
+import { MapplsPolygonController } from './polygon/MapplsPolygonController';
 import { MapplsPolygonLayer, type MapplsActualPolygon } from './polygon/MapplsPolygonLayer';
 import { MapplsPolygonOverlayRenderer } from './polygon/MapplsPolygonOverlayRenderer';
 import { MapplsGroundImageController } from './groundimage/MapplsGroundImageController';
@@ -45,6 +45,16 @@ export interface MapplsConfig extends MapConfig {
   /** Restricts panning/zooming so the viewport cannot leave this rectangle. */
   restrictBounds?: GeoRectBounds;
   markerTilingOptions?: MarkerTilingOptions;
+  /**
+   * When to draw polylines as raster tiles; {@link PolylineTilingOptions.Default} if omitted.
+   * The controller's `setPolylineTilingOptions` replaces it later.
+   */
+  polylineTilingOptions?: PolylineTilingOptions;
+  /**
+   * When to draw circles as raster tiles; {@link CircleTilingOptions.Default} if omitted.
+   * The controller's `setCircleTilingOptions` replaces it later.
+   */
+  circleTilingOptions?: CircleTilingOptions;
 }
 
 // Sentinel used to silently cancel initialization when destroy() is called before load.
@@ -127,6 +137,7 @@ export class MapplsProvider extends MapProvider {
     }
 
     const map = await waitForGlMap(mapplsMap);
+    // paddings are applied by the controller (camera-centre shift) on its first move, not as engine padding.
     if (token !== this.initToken) {
       try {
         map.remove();
@@ -150,6 +161,12 @@ export class MapplsProvider extends MapProvider {
     const markerEventController = new MapplsMarkerEventController(markerController);
     const circleController = getCircleController(holder, canEditStyle);
     const polylineController = getPolylineController(holder, canEditStyle);
+    // Many polylines are drawn as tiles by the tile service worker and shown as one raster
+    // layer (the view controller mounts it); taps still resolve against the original paths.
+    polylineController.tiler = new PolylineTiler(config.polylineTilingOptions ?? PolylineTilingOptions.Default);
+    // Many circles are drawn as tiles too, shown as one raster layer at the bottom of the circle
+    // band (the view controller mounts it); taps still resolve against the original circles.
+    circleController.tiler = new CircleTiler(config.circleTilingOptions ?? CircleTilingOptions.Default);
     const polygonController = getPolygonController(holder, canEditStyle);
     const groundImageController = getGroundImageController(holder, canEditStyle);
     const rasterLayerController = getRasterLayerController(holder, canEditStyle);
@@ -246,11 +263,11 @@ function getPolylineController(
 function getPolygonController(
   holder: MapplsMapViewHolder,
   canEditStyle: () => boolean,
-): MapplsPolygonConductor {
+): MapplsPolygonController {
   const polygonManager = new PolygonManager<MapplsActualPolygon>();
   const layer = new MapplsPolygonLayer({ holder, canEditStyle });
   const renderer = new MapplsPolygonOverlayRenderer({ layer, polygonManager, holder });
-  return new MapplsPolygonConductor(renderer);
+  return new MapplsPolygonController(renderer);
 }
 
 function getGroundImageController(

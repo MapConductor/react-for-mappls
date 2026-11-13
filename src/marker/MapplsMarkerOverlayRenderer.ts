@@ -3,6 +3,7 @@ import {
   createDefaultIcon,
   createMarkerEntity,
   markerIconHashCode,
+  MarkerDrawOrderView,
   type AddParams,
   type BitmapIcon,
   type ChangeParams,
@@ -30,6 +31,9 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
   private readonly iconBitmaps = new Map<string, BitmapIcon>();
   private readonly pendingImageRemovals = new Set<string>();
 
+  /** @internal */
+  private readonly drawOrder = new MarkerDrawOrderView();
+
   readonly markerManager: MarkerManager<MapplsActualMarker>;
   readonly markerLayer: MarkerLayer;
   readonly dragLayer: MarkerDragLayer;
@@ -52,6 +56,9 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
     // MarkerLayer.draw() already filters out entities with visible=false,
     // so hiding the native marker while the animation overlay plays is free.
     this.supportsAnimationOverlay = true;
+    // Rewriting every feature's sort key is heavy, so the order catches up once
+    // the camera settles rather than following the rotation frame by frame.
+    holder.map.on('moveend', () => this.followHeading());
   }
 
   async onAdd(data: AddParams[]): Promise<(MapplsActualMarker | null)[]> {
@@ -107,7 +114,7 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
       },
       properties: {
         ...entity.marker.properties,
-        [MapplsMarkerProp.Z_INDEX]: resolveZIndex(entity.state),
+        [MapplsMarkerProp.Z_INDEX]: resolveZIndex(entity.state, this.drawOrder),
       },
     };
     this.markerLayer.draw(this.markerManager.allEntities());
@@ -140,6 +147,24 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
     this.dragLayer.drawSelected();
   }
 
+  /** Re-sorts after the map turns: among equal zIndex, the one lower on screen is in front. @internal */
+  private followHeading(): void {
+    const map = this.holder.map;
+    if (!this.drawOrder.update(map.getBearing(), map.getCenter().lng)) return;
+    for (const entity of this.markerManager.allEntities()) {
+      if (!entity.marker) continue;
+      entity.marker = {
+        ...entity.marker,
+        properties: {
+          ...entity.marker.properties,
+          [MapplsMarkerProp.Z_INDEX]: resolveZIndex(entity.state, this.drawOrder),
+        },
+      };
+    }
+    this.redraw();
+    this.drawDragLayer();
+  }
+
   redraw(): void {
     this.markerLayer.draw(this.markerManager.allEntities());
   }
@@ -170,7 +195,7 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
       properties: {
         [MapplsMarkerProp.ID]: state.id,
         [MapplsMarkerProp.ICON_ID]: iconId,
-        [MapplsMarkerProp.Z_INDEX]: resolveZIndex(state),
+        [MapplsMarkerProp.Z_INDEX]: resolveZIndex(state, this.drawOrder),
       },
     };
   }
@@ -228,8 +253,7 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
     url: string,
   ): Promise<HTMLImageElement | ImageBitmap | ImageData> {
     try {
-      const image = await this.holder.map.loadImage(url);
-      return image.data;
+      return await this.loadImageThroughMap(url);
     } catch {
       const image = new Image();
       image.decoding = 'async';
@@ -240,6 +264,36 @@ export class MapplsMarkerOverlayRenderer extends AbstractMarkerOverlayRenderer<
       });
       return image;
     }
+  }
+
+  /**
+   * `map.loadImage` in the callback form the Mappls SDK has.
+   *
+   * The Mappls map is built on the mapbox-gl v1 line, where `loadImage(url, callback)`
+   * returns nothing and reports through the callback. Awaiting it as maplibre's promise
+   * form got `undefined` (so this fell back to a plain Image and fetched the icon twice),
+   * and the SDK then called the missing callback when its own fetch finished, which threw
+   * "e is not a function" as an unhandled rejection inside the SDK on every page with a
+   * marker. A promise, if a future SDK returns one, is honoured as well.
+   */
+  private loadImageThroughMap(url: string): Promise<HTMLImageElement | ImageBitmap | ImageData> {
+    type Loaded = HTMLImageElement | ImageBitmap | ImageData;
+    const map = this.holder.map as unknown as {
+      loadImage(
+        url: string,
+        callback: (error?: Error | null, image?: Loaded | null) => void,
+      ): void | Promise<{ data: Loaded }>;
+    };
+    return new Promise<Loaded>((resolve, reject) => {
+      const returned = map.loadImage(url, (error, image) => {
+        if (error) reject(error);
+        else if (image) resolve(image);
+        else reject(new Error(`Failed to load marker icon: ${url}`));
+      });
+      if (returned && typeof (returned as Promise<{ data: Loaded }>).then === 'function') {
+        (returned as Promise<{ data: Loaded }>).then((response) => resolve(response.data), reject);
+      }
+    });
   }
 
   private ensureFallbackDefaultIcon(): boolean {
@@ -305,9 +359,7 @@ function createIconOffset(icon: BitmapIcon): [number, number] {
   ];
 }
 
-function resolveZIndex(state: MarkerState): number {
-  // android-sdk と同じく、未指定(null)のときだけ緯度による自動 z-order にフォールバックする。
-  // 明示的な 0 は「z-order 0」として尊重する。
-  if (state.zIndex != null) return state.zIndex;
-  return Math.round(-state.position.latitude * 1_000_000 - state.position.longitude);
+function resolveZIndex(state: MarkerState, drawOrder: MarkerDrawOrderView): number {
+  // zIndex（未指定は 0）が先、同じなら回転後の画面で下、同じ行なら左が手前。全プロバイダ共通の順。
+  return drawOrder.order(state.zIndex, state.position);
 }
